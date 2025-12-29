@@ -22,7 +22,7 @@ class GraphConfig:
 class RetrievalConfig:
     top_k_vectors: int = 10
     top_k_graph: int = 10
-    alpha_semantic: float = 0.6  # blend between semantic and graph scores
+    alpha_semantic: float = 0.6  # blend between semantic and graph scores 
 
 
 @dataclass

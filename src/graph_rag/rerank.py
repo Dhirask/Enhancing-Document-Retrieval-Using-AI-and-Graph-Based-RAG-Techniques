@@ -15,7 +15,7 @@ class Reranker:
         self.graph_store = graph_store
 
     def rerank(self, result: RetrievalResult) -> RerankedResult:
-        # Blend semantic score with a simple graph centrality prior.
+        # Blend semantic score with a simple graph centrality prior .
         ids = [hit.chunk.id for hit in result.merged]
         centrality = {nid: score for nid, score in self.graph_store.centrality_score(ids)}
         rescored: List[RetrievedChunk] = []

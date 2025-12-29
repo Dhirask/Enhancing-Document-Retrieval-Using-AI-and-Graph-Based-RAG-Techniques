@@ -27,8 +27,13 @@ class GraphRAGPipeline:
         self.retriever.index(result.chunks)
 
     def answer(self, query: str) -> str:
-        entry_entities = []  # placeholder: extract from query
+        entry_entities = self._extract_query_entities(query)
         retrieved = self.retriever.retrieve(query, entry_entities)
         reranked = self.reranker.rerank(retrieved)
         answer = self.generator.generate(reranked, query)
         return answer.answer
+
+    def _extract_query_entities(self, query: str) -> List[str]:
+        """Extract entity surface forms from the query using the ingestion NER model."""
+        doc = self.ingestion._nlp(query)  # reuse loaded spaCy model
+        return list({ent.text for ent in doc.ents})

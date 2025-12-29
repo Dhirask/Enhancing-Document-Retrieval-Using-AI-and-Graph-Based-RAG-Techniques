@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import List, Sequence
+from typing import Dict, List, Sequence
+
+import numpy as np
 
 from .config import RetrievalConfig
 from .embeddings import TextEmbedder
@@ -25,11 +27,41 @@ class Retriever:
         self.config = config
         self.embedder = embedder
         self.graph_store = graph_store
-        self._index: List[Chunk] = []  # placeholder for FAISS index storage
+        self._id_to_chunk: Dict[str, Chunk] = {}
+        self._chunk_ids: List[str] = []
+        self._faiss_index = None
+        self._dim = None
 
     def index(self, chunks: Sequence[Chunk]) -> None:
-        # Real implementation would add to FAISS; here we keep in-memory list.
-        self._index.extend(chunks)
+        if not chunks:
+            return
+
+        # Skip chunks already indexed to avoid duplicate IDs and stale mappings.
+        new_chunks = [c for c in chunks if c.id not in self._id_to_chunk]
+        if not new_chunks:
+            return
+
+        vectors = np.asarray(self.embedder.encode([c.text for c in new_chunks]), dtype=np.float32)
+        if vectors.ndim != 2:
+            raise ValueError("Embedder returned invalid shape for vectors.")
+        dim = vectors.shape[1]
+        if self._dim is None:
+            self._dim = dim
+        elif dim != self._dim:
+            raise ValueError("Embedding dimension mismatch across indexed chunks.")
+
+        try:
+            import faiss  # type: ignore
+        except ImportError as exc:  # pragma: no cover - dependency guard
+            raise ImportError("faiss is required for retrieval. Install with `pip install faiss-cpu`." ) from exc
+
+        if self._faiss_index is None:
+            self._faiss_index = faiss.IndexFlatIP(self._dim)
+        self._faiss_index.add(vectors)
+
+        for chunk in new_chunks:
+            self._id_to_chunk[chunk.id] = chunk
+            self._chunk_ids.append(chunk.id)
 
     def retrieve(self, query: str, entry_entities: List[str]) -> RetrievalResult:
         semantic_hits = self._semantic_search(query)
@@ -38,22 +70,34 @@ class Retriever:
         return RetrievalResult(semantic=semantic_hits, graph=graph_hits, merged=merged)
 
     def _semantic_search(self, query: str) -> List[RetrievedChunk]:
-        # Placeholder: cosine on embeddings; here we use text length similarity.
-        q_len = len(query.split())
-        scored = []
-        for chunk in self._index:
-            score = 1.0 / (1 + abs(len(chunk.text.split()) - q_len))
-            scored.append(RetrievedChunk(chunk=chunk, score=score))
-        scored.sort(key=lambda x: x.score, reverse=True)
-        return scored[: self.config.top_k_vectors]
+        if not self._faiss_index or not self._chunk_ids:
+            return []
+        q_vec = np.asarray(self.embedder.encode([query]), dtype=np.float32)
+        if q_vec.ndim != 2:
+            return []
+        scores, idxs = self._faiss_index.search(q_vec, min(self.config.top_k_vectors, len(self._chunk_ids)))  # type: ignore[arg-type]
+        hits: List[RetrievedChunk] = []
+        for score, idx in zip(scores[0], idxs[0]):
+            if idx < 0 or idx >= len(self._chunk_ids):
+                continue
+            chunk_id = self._chunk_ids[idx]
+            chunk = self._id_to_chunk.get(chunk_id)
+            if not chunk:
+                continue
+            hits.append(RetrievedChunk(chunk=chunk, score=float(score)))
+        return hits
 
     def _graph_expand(self, entry_entities: List[str]) -> List[RetrievedChunk]:
-        node_ids = self.graph_store.neighbors(entry_entities, max_hops=self.config.top_k_graph)
-        scored = []
+        if not entry_entities:
+            return []
+        node_ids = self.graph_store.neighbors(entry_entities, max_hops=2, limit=self.config.top_k_graph)
+        hits: List[RetrievedChunk] = []
         for node_id in node_ids:
-            # In a real system, map node ids back to chunks; here we skip that mapping.
-            pass
-        return []
+            chunk = self._id_to_chunk.get(node_id)
+            if not chunk:
+                continue
+            hits.append(RetrievedChunk(chunk=chunk, score=1.0))
+        return hits
 
     def _merge(self, semantic: List[RetrievedChunk], graph: List[RetrievedChunk]) -> List[RetrievedChunk]:
         merged = {hit.chunk.id: hit for hit in semantic}
