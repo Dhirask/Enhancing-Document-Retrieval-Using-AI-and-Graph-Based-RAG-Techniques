@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from typing import Iterable, List, Sequence
-from networkx import Node2Vec, nx
+from node2vec import Node2Vec
+import networkx as nx
 
 
 class TextEmbedder:

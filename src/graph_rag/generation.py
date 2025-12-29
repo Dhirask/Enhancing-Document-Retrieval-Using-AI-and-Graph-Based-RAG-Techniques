@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
-import google.generativeai as genai
+import google.genai as genai
 
 from .config import GenerationConfig
 from .rerank import RerankedResult

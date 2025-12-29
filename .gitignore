@@ -1,3 +1,4 @@
 configs/
 examples/__pycache__/
 src/graph_rag/__pycache__/
+rag-env/
