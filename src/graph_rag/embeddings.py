@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Iterable, List, Sequence
+from networkx import Node2Vec, nx
 
 
 class TextEmbedder:
@@ -45,10 +46,10 @@ class GraphEmbedder:
         self._fit_nodes: List[str] = []
 
     def fit(self, graph: "nx.Graph") -> None:
-        try:
-            from networkx.algorithms.node2vec import Node2Vec
-        except ImportError as exc:  # pragma: no cover - dependency guard
-            raise ImportError("networkx>=2.6 is required for GraphEmbedder Node2Vec.") from exc
+        # try:
+        #     from networkx.algorithms.node2vec import Node2Vec
+        # except ImportError as exc:  # pragma: no cover - dependency guard
+        #     raise ImportError("networkx>=2.6 is required for GraphEmbedder Node2Vec.") from exc
 
         node2vec = Node2Vec(
             graph,
