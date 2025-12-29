@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
-from openai import OpenAI, OpenAIError
+import google.generativeai as genai
 
 from .config import GenerationConfig
 from .rerank import RerankedResult
@@ -21,11 +21,11 @@ class GenerationResult:
 class Generator:
     def __init__(self, config: GenerationConfig) -> None:
         self.config = config
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise RuntimeError("Set OPENAI_API_KEY in the environment for generation.")
-        api_base = os.getenv("OPENAI_BASE_URL")
-        self.client = OpenAI(api_key=api_key, base_url=api_base)
+            raise RuntimeError("Set GEMINI_API_KEY or GOOGLE_API_KEY in the environment for generation.")
+        genai.configure(api_key=api_key)
+        self._model = genai.GenerativeModel(self.config.model_name)
 
     def _build_context(self, reranked: RerankedResult, max_chars: int = 12000) -> Tuple[str, List[str]]:
         seen = set()
@@ -62,18 +62,19 @@ class Generator:
         user_prompt = f"Query: {query}\n\nContext:\n{context}\n\nAnswer the query grounded strictly in the context."
 
         try:
-            resp = self.client.chat.completions.create(
-                model=self.config.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
+            resp = self._model.generate_content(
+                [
+                    {"role": "system", "parts": [system_prompt]},
+                    {"role": "user", "parts": [user_prompt]},
                 ],
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
+                generation_config={
+                    "temperature": self.config.temperature,
+                    "max_output_tokens": self.config.max_tokens,
+                },
             )
-            message_content = resp.choices[0].message.content or ""
+            message_content = resp.text or ""
             answer = message_content.strip() or "LLM returned empty content."
-        except (OpenAIError, Exception) as exc:
+        except Exception:
             logger.exception("LLM generation failed")
             answer = "LLM generation failed; please try again later."
 
