@@ -1,8 +1,11 @@
+import logging
 import pathlib
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Tuple
 
 from .config import PipelineConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -51,9 +54,20 @@ class IngestionPipeline:
 
     def ingest(self, paths: Iterable[str]) -> IngestionResult:
         documents = self._load_documents(paths)
+        logger.info(f"Loaded {len(documents)} documents")
+        
         chunks = self._chunk_documents(documents)
+        logger.info(f"Created {len(chunks)} chunks")
+        
+        if not chunks:
+            raise ValueError("No chunks created from input documents")
+        
         entities, chunk_entities = self._extract_entities(chunks)
+        logger.info(f"Extracted {len(entities)} unique entities")
+        
         relations = self._extract_relations(chunks, entities, chunk_entities)
+        logger.info(f"Extracted {len(relations)} relations")
+        
         return IngestionResult(chunks=chunks, entities=entities, relations=relations)
 
     def _load_documents(self, paths: Iterable[str]) -> List[str]:
