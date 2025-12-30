@@ -1,7 +1,8 @@
+from .ingestion import Chunk, Entity, Relation
+
+
 import re
 from typing import Iterable, List, Tuple
-
-from .ingestion import Chunk, Entity, Relation
 
 
 class GraphStore:

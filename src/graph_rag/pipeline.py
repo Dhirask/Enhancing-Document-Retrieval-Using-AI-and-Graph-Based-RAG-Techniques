@@ -3,7 +3,7 @@ from typing import List
 from .config import PipelineConfig
 from .embeddings import TextEmbedder
 from .generation import Generator
-from .graph_store import GraphStore
+from .GraphStore import GraphStore
 from .ingestion import IngestionPipeline
 from .rerank import Reranker
 from .retrieval import Retriever

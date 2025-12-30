@@ -3,7 +3,7 @@ import os
 from dataclasses import dataclass
 from typing import List, Tuple
 
-import google.genai as genai
+from google import genai
 
 from .config import GenerationConfig
 from .rerank import RerankedResult
@@ -24,8 +24,7 @@ class Generator:
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
             raise RuntimeError("Set GEMINI_API_KEY or GOOGLE_API_KEY in the environment for generation.")
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(self.config.model_name)
+        self._client = genai.Client(api_key=api_key)
 
     def _build_context(self, reranked: RerankedResult, max_chars: int = 12000) -> Tuple[str, List[str]]:
         seen = set()
@@ -62,17 +61,18 @@ class Generator:
         user_prompt = f"Query: {query}\n\nContext:\n{context}\n\nAnswer the query grounded strictly in the context."
 
         try:
-            resp = self._model.generate_content(
-                [
-                    {"role": "system", "parts": [system_prompt]},
-                    {"role": "user", "parts": [user_prompt]},
+            resp = self._client.responses.create(
+                model=self.config.model_name,
+                contents=[
+                    {"role": "system", "parts": [{"text": system_prompt}]},
+                    {"role": "user", "parts": [{"text": user_prompt}]},
                 ],
-                generation_config={
+                config={
                     "temperature": self.config.temperature,
                     "max_output_tokens": self.config.max_tokens,
                 },
             )
-            message_content = resp.text or ""
+            message_content = getattr(resp, "text", "") or ""
             answer = message_content.strip() or "LLM returned empty content."
         except Exception:
             logger.exception("LLM generation failed")

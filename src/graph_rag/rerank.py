@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import List
 
-from .graph_store import GraphStore
+from .GraphStore import GraphStore
 from .retrieval import RetrievalResult, RetrievedChunk
 
 

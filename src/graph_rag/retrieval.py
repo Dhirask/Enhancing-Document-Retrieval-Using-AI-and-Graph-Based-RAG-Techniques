@@ -5,7 +5,7 @@ import numpy as np
 
 from .config import RetrievalConfig
 from .embeddings import TextEmbedder
-from .graph_store import GraphStore
+from .GraphStore import GraphStore
 from .ingestion import Chunk
 
 
