@@ -1,15 +1,10 @@
-import logging
 import os
 from dataclasses import dataclass
-from typing import List, Tuple
-
-from google import genai
+from typing import List
+from google import genai  # correct import from the google-genai package
 
 from .config import GenerationConfig
 from .rerank import RerankedResult
-
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -21,61 +16,56 @@ class GenerationResult:
 class Generator:
     def __init__(self, config: GenerationConfig) -> None:
         self.config = config
-        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GENAI_API_KEY")
         if not api_key:
-            raise RuntimeError("Set GEMINI_API_KEY or GOOGLE_API_KEY in the environment for generation.")
-        self._client = genai.Client(api_key=api_key)
+            raise RuntimeError("Set GEMINI_API_KEY or GENAI_API_KEY environment variable")
 
-    def _build_context(self, reranked: RerankedResult, max_chars: int = 12000) -> Tuple[str, List[str]]:
-        seen = set()
-        parts: List[str] = []
-        citations: List[str] = []
-        total = 0
+        # Initialize the current GenAI client
+        self.client = genai.Client(api_key=api_key)
+        self.model_name = "text-bison-001"  
+
+    def _build_context(self, reranked: RerankedResult, max_chars: int = 12000):
+        seen, parts, citations, total = set(), [], [], 0
         for hit in reranked.items:
-            if hit.chunk.id in seen:
+            cid = hit.chunk.id
+            if cid in seen:
                 continue
-            snippet = " ".join(hit.chunk.text.split()).strip()
-            if not snippet:
-                continue
-            new_total = total + len(snippet)
-            if new_total > max_chars:
+            text = " ".join(hit.chunk.text.split())
+            if total + len(text) > max_chars:
                 break
-            parts.append(f"[{hit.chunk.id}] {snippet}")
-            citations.append(hit.chunk.id)
-            seen.add(hit.chunk.id)
-            total = new_total
+            parts.append(f"[{cid}] {text}")
+            citations.append(cid)
+            seen.add(cid)
+            total += len(text)
         return "\n".join(parts), citations
 
     def generate(self, reranked: RerankedResult, query: str) -> GenerationResult:
         context, citations = self._build_context(reranked)
         if not context:
-            return GenerationResult(answer="No supporting context available to answer the query.", citations=[])
+            return GenerationResult("No supporting context available to answer the query.", [])
 
-        system_prompt = (
-            "You are a precise assistant. "
-            "Use ONLY the provided context. "
-            "Every factual claim MUST be cited with chunk IDs in brackets. "
-            "If the answer cannot be derived from the context, reply: "
-            "'Insufficient context to answer the query.'"
-        )
-        user_prompt = f"Query: {query}\n\nContext:\n{context}\n\nAnswer the query grounded strictly in the context."
+        prompt = f"""
+You are a precise assistant.
+Answer ONLY using the provided context.
+Cite sources using [chunk_id].
+
+Query:
+{query}
+
+Context:
+{context}
+"""
 
         try:
-            resp = self._client.responses.create(
-                model=self.config.model_name,
-                contents=[
-                    {"role": "system", "parts": [{"text": system_prompt}]},
-                    {"role": "user", "parts": [{"text": user_prompt}]},
-                ],
-                config={
-                    "temperature": self.config.temperature,
-                    "max_output_tokens": self.config.max_tokens,
-                },
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                # optional config if needed:
+                # config={"temperature": self.config.temperature,
+                #         "max_output_tokens": self.config.max_tokens},
             )
-            message_content = getattr(resp, "text", "") or ""
-            answer = message_content.strip() or "LLM returned empty content."
-        except Exception:
-            logger.exception("LLM generation failed")
-            answer = "LLM generation failed; please try again later."
+            answer = response.text.strip()
+        except Exception as e:
+            answer = f"LLM generation failed; error: {e}"
 
         return GenerationResult(answer=answer, citations=citations)

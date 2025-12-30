@@ -1,0 +1,1 @@
+Machine Learning is a subset of Artificial Intelligence. Neural Networks are inspired by biological neurons. Deep Learning uses multiple layers of neural networks. Transformers revolutionized Natural Language Processing. Attention mechanisms allow models to focus on relevant parts. 

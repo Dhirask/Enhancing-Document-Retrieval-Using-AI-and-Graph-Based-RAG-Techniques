@@ -56,6 +56,19 @@ class GraphStore:
         except Exception as e:
             logger.warning(f"Could not verify database: {e}")
 
+    def verify_connection(self) -> bool:
+        """Test connectivity to Neo4j and log status."""
+        if not self._driver:
+            self.connect()
+        try:
+            with self._driver.session(database=self.database) as session:
+                result = session.run("RETURN 1 AS test").single()
+                logger.info(f"Neo4j connection verified on database '{self.database}'")
+                return result is not None
+        except Exception as e:
+            logger.error(f"Neo4j connection failed: {e}")
+            return False
+
     # --- Write ---
     def upsert(self, chunks: Iterable[Chunk], entities: Iterable[Entity], relations: Iterable[Relation]) -> None:
         """Upsert chunks, entities, and relations into Neo4j."""
